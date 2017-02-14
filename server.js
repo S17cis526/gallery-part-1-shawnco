@@ -46,7 +46,7 @@ function imageNamesToTags(fileNames){
 // Give the image
 function serveImage(filename, req, res)
 {
-  fs.readFile('images/' + decodeURIComponent(fileName), function(err, data){
+  fs.readFile('images/' + decodeURIComponent(filename), function(err, data){
     if(err) {
       console.error(err);
       res.statusCode = 404;
