@@ -7,6 +7,7 @@
  */
 
 var multipart = require('./multipart');
+var template = require('./template');
 var http = require('http');
 var url = require('url');
 var fs = require('fs');
@@ -23,6 +24,7 @@ var mobile = fs.readFileSync('images/mobile.jpg');
 
 // Resource for the stylesheet
 var stylesheet = fs.readFileSync('gallery.css');
+template.loadDir('templates');
 
 // Retrieve all image file names
 function getImageNames(callback){
@@ -61,24 +63,7 @@ function serveImage(filename, req, res)
 
 // Compiles the gallery HTML together
 function buildGallery(imageTags){
-  var html =  '<!doctype html>';
-      html += '<head>';
-      html +=   '<title>' + config.title + '</title>';
-      html +=   '<link href="gallery.css" rel="stylesheet" type="text/css">'
-      html += '</head>';
-      html += '<body>';
-      html += '  <h1>' + config.title + '</h1>';
-      html += '  <form method="GET" action="">';
-      html += '    <input type="text" name="title">';
-      html += '    <input type="submit" value="Change Gallery Title">';
-      html += '  </form>';
-      html += imageNamesToTags(imageTags).join('');
-      html += ' <form action="" method="POST" enctype="multipart/form-data">';
-      html += '   <input type="file" name="image">';
-      html += '   <input type="submit" value="Upload Image">';
-      html += ' </form>';
-      html += '</body>';
-  return html;
+    return template.render('gallery', {title: config.title, imageTags: imageTags});
 }
 
 // Serve the gallery page
