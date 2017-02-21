@@ -6,11 +6,14 @@
  * simple photo gallery web app.
  */
 
+var multipart = require('./multipart');
+var template = require('./template');
 var http = require('http');
+var url = require('url');
 var fs = require('fs');
 var port = 3002;
 
-var imageNames = ['ace.jpg', 'bubble.jpg', 'chess.jpg', 'fern.jpg', 'mobile.jpg'];
+var config = JSON.parse(fs.readFileSync('config.json'));
 
 // Resource files for the images
 var ace = fs.readFileSync('images/ace.jpg');
@@ -26,6 +29,7 @@ var title = config['title'];
 
 // Resource for the stylesheet
 var stylesheet = fs.readFileSync('gallery.css');
+template.loadDir('templates');
 
 function saveConfig(){
 	var data = JSON.stringify(config);
@@ -90,57 +94,23 @@ function imageNamesToTags(fileNames){
 // Give the image
 function serveImage(filename, req, res)
 {
-	/*var data = fs.readFile('images/' + filename, function(err, data)
-	{
-		if (err)
-		{
-			console.log(err);
-			res.statusCode = 500;
-			res.statusMessage = 'I dun goofd';
-			res.end('meh');
-			return;
-		}
-		res.setHeader('Content-Type', 'image/jpeg');
-		res.end(data);
-	});*/
-	var filename = './' + req.url;
-	fs.stat(filename, function(err, stats){
-		if(err){handleError(req, res, err); return;}
-		if(stats.isFile()){
-			fs.readFile(filename, function(err, file){
-				if(err){handleError(req, res, err); return;}
-				res.writeHead(200, {'Content-Type': 'text/' + filename.split('.').last});
-				res.end(file);
-			});
-		}
-	});
-}
-
+  fs.readFile('images/' + decodeURIComponent(filename), function(err, data){
+    if(err) {
+      console.error(err);
+      res.statusCode = 404;
+      res.statusMessage = "Resource not found";
+      res.end();
+      return;
+    }
+    res.setHeader('Content-Type', 'image/*');
+    res.end(data);
+  });
 }
 
 // Compiles the gallery HTML together
-function buildGallery(req, res, images){
-      /*var gHtml = imageNames.map(function(fileName)
-      {
-       	return '<img src="' + fileName + '" />';
-      }).join(' ');            
-		var html = '<!doctype html>';
-		html += '<html><head><title>Dynamic Page</title>';
-      html += '<link rel="stylesheet" href="gallery.css" type="text/css" />';
-      html += '</head><body>';
-		html += '<h1>Gallery</h1>';
-      html += gHtml;
-      html += '<h1>Hai</h1> Time is  ' + Date.now();
-		html += '</body></html>';
-		return html;*/
-	images.map(function(file){
-		return "<img src='/images/" + file "'/>";
-	}).join("\n");
-	res.writeHead(200, {'Content-Type': 'text/html'});
-	res.end(
-		'<!doctype html>' +
-		'<html><head><title>Photo Gallery</title></head><body>' +
-		'<h1>Photo Gallery</h1>' + images + '</body></html>');
+function buildGallery(imageTags){
+    return template.render('gallery', {title: config.title, imageTags: imageTags});
+
 }
 
 // Serve the gallery page
@@ -207,6 +177,61 @@ function generateImageForm(){
 	'<form enctype="multipart/form-data" action="/" method="POST"><input type="file" name="image"><input type="submit" value="Upload Image"></form>';
 }
 
+function uploadImage(req, res) {
+  multipart(req, res, function(req, res) {
+    // make sure an image was uploaded
+    console.log('filename', req.body.filename)
+    if(!req.body.image.filename) {
+      console.error("No file in upload");
+      res.statusCode = 400;
+      res.statusMessage = "No file specified"
+      res.end("No file specified");
+      return;
+    }
+    fs.writeFile('images/' + req.body.image.filename, req.body.image.data, function(err){
+      if(err) {
+        console.error(err);
+        res.statusCode = 500;
+        res.statusMessage = "Server Error";
+        res.end("Server Error");
+        return;
+      }
+      serveGallery(req, res);
+    });
+  });
+}
+
+function handleRequest(req, res) {
+  // at most, the url should have two parts -
+  // a resource and a querystring separated by a ?
+  var urlParts = url.parse(req.url);
+
+  if(urlParts.query){
+    var matches = /title=(.+)($|&)/.exec(urlParts.query);
+    if(matches && matches[1]){
+      config.title = decodeURIComponent(matches[1]);
+      fs.writeFile('config.json', JSON.stringify(config));
+    }
+  }
+
+  switch(urlParts.pathname) {
+    case '/':
+    case '/gallery':
+      if(req.method == 'GET') {
+        serveGallery(req, res);
+      } else if(req.method == 'POST') {
+        uploadImage(req, res);
+      }
+      break;
+    case '/gallery.css':
+      res.setHeader('Content-Type', 'text/css');
+      res.end(stylesheet);
+      break;
+    default:
+      serveImage(req.url, req, res);
+  }
+}
+
 var server = http.createServer((req, res) =>
 {
 	switch (req.url)
@@ -232,21 +257,9 @@ var server = http.createServer((req, res) =>
 {
 	console.log('Listening on port ' + port);
 });*/
-var server = new http.Server(function(req, res){
-	var resource = req.url.split('?')[0];
-	req.query = querystring.parse(req.url.split('?')[1]);
-	switch(resource){
-		case '/':
-			parsePostData(req, res, serveGallery);
-			break;
-		case '/favicon.ico':
-			req.writeHead(400);
-			req.end();
-			break;
-		case '/gallery.css';
-			serveCSS(req, res);
-			break;
-		default:
-			serveImage(req, res);
-			break;
-}).listen(80);
+
+var server = http.createServer(handleRequest);
+server.listen(port, function(){
+	console.log('Server is listening on port ', port);
+});
+
